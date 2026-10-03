@@ -1,0 +1,9 @@
+{
+  "name": "Buzzwords",
+  "short_name": "Buzzwords",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF1DC",
+  "theme_color": "#FFF1DC",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
