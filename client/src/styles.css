@@ -524,3 +524,4 @@ textarea { font-family: inherit; resize: vertical; }
   .topbar { gap: 0.35rem; }
 }
 .sticker { top: -4%; }
+.host-note { margin: 0.8rem 1rem 0; padding: 0.55rem 0.8rem; border: 2px dashed var(--ink); border-radius: 12px; background: #fff; font-weight: 700; font-size: 0.85rem; max-width: 720px; align-self: center; }

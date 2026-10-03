@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { randomLook, sanitizeLook, type Look } from '../../shared/looks';
 import type { Action, ClientMsg, GameEvent, RoomView, ServerMsg } from '../../shared/types';
+import { hostingRuntime } from './host';
+import { detectMode, peerTransport, wsTransport, type Mode, type Transport } from './transport';
 
 export type Status = 'connecting' | 'open' | 'reconnecting';
 
@@ -68,7 +70,9 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   const [needsName, setNeedsName] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; id: number } | null>(null);
-  const ws = useRef<WebSocket | null>(null);
+  const ws = useRef<Transport | null>(null);
+  const [mode, setMode] = useState<Mode | null>(null);
+  const [isHostDevice, setIsHostDevice] = useState(false);
   const listeners = useRef(new Set<Listener>());
   const rtcListeners = useRef(new Set<RtcListener>());
   const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
@@ -78,7 +82,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   const closedForGood = useRef(false);
 
   const raw = useCallback((m: ClientMsg) => {
-    if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(m));
+    if (ws.current?.isOpen()) ws.current.send(m);
   }, []);
 
   const hello = useCallback(() => {
@@ -95,24 +99,18 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
     let retry: ReturnType<typeof setTimeout>;
     let pinger: ReturnType<typeof setInterval>;
 
-    const connect = () => {
+    let unavailable = 0;
+    let everOpen = false;
+    const connect = async () => {
       clearTimeout(retry);
       if (closedForGood.current) return;
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const sock = new WebSocket(`${proto}://${location.host}/ws`);
-      ws.current = sock;
-      sock.onopen = () => {
-        attempt = 0;
-        setStatus('open');
-        bestRtt.current = Infinity;
-        hello();
-        const ping = () => raw({ t: 'ping', c: Date.now() });
-        ping();
-        clearInterval(pinger);
-        pinger = setInterval(ping, 4000);
-      };
-      sock.onmessage = (e) => {
-        const m = JSON.parse(e.data) as ServerMsg;
+      const m0 = await detectMode();
+      if (closedForGood.current) return;
+      setMode(m0);
+      const rt = m0 === 'peer' ? hostingRuntime(code) : null;
+      setIsHostDevice(!!rt);
+      let t: Transport;
+      const onMessage = (m: ServerMsg) => {
         if (m.t === 'pong') {
           const now = Date.now();
           const rtt = now - m.c;
@@ -148,30 +146,52 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
           if (m.fatal && m.message !== 'Pick a name to join') {
             setFatal(m.message);
             closedForGood.current = true;
-            sock.close();
+            t.close();
           } else if (!m.fatal) setToast({ msg: m.message, id: Date.now() });
         }
       };
-      sock.onclose = () => {
-        clearInterval(pinger);
-        if (ws.current !== sock || closedForGood.current) return;
-        setStatus('reconnecting');
-        setSpeaking(new Set());
-        attempt++;
-        retry = setTimeout(connect, Math.min(4000, 300 * 2 ** attempt));
+      const handlers = {
+        onOpen: () => {
+          attempt = 0;
+          unavailable = 0;
+          everOpen = true;
+          setStatus('open');
+          bestRtt.current = Infinity;
+          hello();
+          const ping = () => raw({ t: 'ping', c: Date.now() });
+          ping();
+          clearInterval(pinger);
+          pinger = setInterval(ping, 4000);
+        },
+        onMessage,
+        onClose: (info?: { fatal?: string }) => {
+          clearInterval(pinger);
+          if (ws.current !== t || closedForGood.current) return;
+          if (info?.fatal === 'unavailable' && ++unavailable >= (everOpen ? 40 : 3)) {
+            setFatal(everOpen ? 'The host left — this room has ended.' : 'Room not found. Double-check the code — and make sure the host still has the game open.');
+            closedForGood.current = true;
+            return;
+          }
+          setStatus('reconnecting');
+          setSpeaking(new Set());
+          attempt++;
+          retry = setTimeout(connect, Math.min(4000, 300 * 2 ** attempt));
+        },
       };
+      t = rt ? rt.loopback(handlers) : m0 === 'server' ? wsTransport(handlers) : peerTransport(code, handlers);
+      ws.current = t;
     };
 
     // phones sleep sockets aggressively — wake up fast when the tab comes back
     const wake = () => {
-      if (document.visibilityState === 'visible' && ws.current?.readyState !== WebSocket.OPEN) {
-        ws.current?.close();
-        connect();
+      if (document.visibilityState === 'visible' && ws.current && !ws.current.isOpen()) {
+        ws.current.close();
+        void connect();
       }
     };
     document.addEventListener('visibilitychange', wake);
     window.addEventListener('online', wake);
-    connect();
+    void connect();
     return () => {
       closedForGood.current = true;
       clearTimeout(retry);
@@ -202,7 +222,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   const serverNow = useCallback(() => Date.now() + offset.current, []);
   const leave = useCallback(() => store.set(idKey(code), null), [code]);
 
-  return { status, view, needsName, fatal, toast, send, raw, join, onEvent, onRtc, speaking, serverNow, leave };
+  return { mode, isHostDevice, status, view, needsName, fatal, toast, send, raw, join, onEvent, onRtc, speaking, serverNow, leave };
 }
 
 export type RoomConn = ReturnType<typeof useRoom>;

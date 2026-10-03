@@ -2,7 +2,9 @@ import { useState } from 'react';
 import type { Look } from '../../../shared/looks';
 import { Avatar } from '../Avatar';
 import { navigate } from '../nav';
+import { startHosting } from '../host';
 import { setProfile, store } from '../net';
+import { apiBase, detectMode } from '../transport';
 import { ProfileForm } from './ProfileForm';
 
 const MASCOT_A: Look = { skin: 4, hair: 8, hairColor: 0, eyes: 1, brows: 1, facial: 0, glasses: 1, hat: 0, top: 1, topColor: 2 };
@@ -19,12 +21,18 @@ export function Home() {
     setErr('');
     try {
       setProfile(p);
-      const res = await fetch('/api/rooms', { method: 'POST' });
-      const { code } = await res.json();
+      let code: string;
+      if ((await detectMode()) === 'server') {
+        const res = await fetch(`${apiBase}/api/rooms`, { method: 'POST' });
+        code = (await res.json()).code;
+      } else {
+        // no game server on this deploy: this device hosts the room itself
+        code = await startHosting();
+      }
       store.set('bw:autojoin', code);
       navigate(`/room/${code}`);
     } catch {
-      setErr('Couldn’t reach the server. Try again?');
+      setErr('Couldn’t open a room — check your connection and try again.');
       setBusy(false);
     }
   };
@@ -32,8 +40,10 @@ export function Home() {
   const go = async (display = false) => {
     const c = code.trim().toUpperCase();
     if (c.length !== 4) return setErr('Room codes are 4 letters');
-    const res = await fetch(`/api/rooms/${c}`).catch(() => null);
-    if (!res?.ok) return setErr(`No room called ${c} 🤔`);
+    if ((await detectMode()) === 'server') {
+      const res = await fetch(`${apiBase}/api/rooms/${c}`).catch(() => null);
+      if (!res?.ok) return setErr(`No room called ${c} 🤔`);
+    }
     navigate(`/room/${c}${display ? '/display' : ''}`);
   };
 

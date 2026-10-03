@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { RoomView } from '../../shared/types';
 import type { RoomConn } from './net';
+import { apiBase } from './transport';
 
 /**
  * Opt-in voice chat for remote play: a small WebRTC mesh (fine for party
@@ -15,7 +16,7 @@ let iceCache: RTCIceServer[] | null = null;
 async function iceServers(): Promise<RTCIceServer[]> {
   if (iceCache) return iceCache;
   try {
-    iceCache = (await (await fetch('/api/ice')).json()).iceServers;
+    iceCache = (await (await fetch(`${apiBase}/api/ice`)).json()).iceServers;
   } catch {
     iceCache = [{ urls: 'stun:stun.l.google.com:19302' }];
   }

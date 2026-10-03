@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CustomDeck } from '../../../shared/types';
 import { navigate } from '../nav';
 import { store } from '../net';
+import { apiBase } from '../transport';
 
 type SavedDeck = CustomDeck & { id: string; updatedAt: number };
 
@@ -26,7 +27,7 @@ export function DeckStudio() {
     setBusy(true);
     setErr('');
     try {
-      const res = await fetch('/api/generate-deck', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt }) });
+      const res = await fetch(`${apiBase}/api/generate-deck`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Something went wrong');
       setEdit({ id: crypto.randomUUID(), name: data.name, words: data.words, updatedAt: Date.now() });

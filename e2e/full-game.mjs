@@ -19,15 +19,30 @@ const assert = (c, msg) => {
   console.log('  ✓', msg);
 };
 
-const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(PORT), DATA_FILE: dataFile }, stdio: 'pipe' });
-server.stdout.on('data', (d) => process.env.DEBUG && process.stdout.write('[srv] ' + d));
-server.stderr.on('data', (d) => process.stdout.write('[srv!] ' + d));
+// E2E_MODE=peer → a static deploy (like Vercel) + PeerJS signaling; the host's browser runs the room.
+const PEER = process.env.E2E_MODE === 'peer';
+const procs = [];
+const start = (args, env) => {
+  const p = spawn(process.execPath, args, { env: { ...process.env, ...env }, stdio: 'pipe' });
+  p.stdout.on('data', (d) => process.env.DEBUG && process.stdout.write('[srv] ' + d));
+  p.stderr.on('data', (d) => process.stdout.write('[srv!] ' + d));
+  procs.push(p);
+};
+if (PEER) {
+  start(['e2e/peer-server.mjs'], {});
+  start(['e2e/static-server.mjs'], { PORT: String(PORT) });
+} else {
+  start(['--import', 'tsx', 'server/index.ts'], { PORT: String(PORT), DATA_FILE: dataFile });
+}
+const server = { kill: () => procs.forEach((p) => p.kill()) };
 for (let i = 0; i < 50; i++) {
   try {
-    if ((await fetch(BASE + '/api/health')).ok) break;
+    if ((await fetch(BASE + '/')).ok) break;
   } catch {}
   await new Promise((r) => setTimeout(r, 200));
 }
+await new Promise((r) => setTimeout(r, 800));
+console.log('mode:', PEER ? 'peer (static host, no game server)' : 'dedicated server');
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || undefined,
@@ -61,6 +76,16 @@ try {
   const tv = await mk({ viewport: { width: 1920, height: 1080 } });
   const tvFrames = [];
   tv.page.on('websocket', (ws) => ws.on('framereceived', (f) => tvFrames.push(String(f.payload))));
+  // peer mode: capture what arrives over WebRTC data channels too
+  await tv.page.addInitScript(() => {
+    window.__frames = [];
+    const orig = RTCPeerConnection.prototype.createDataChannel;
+    RTCPeerConnection.prototype.createDataChannel = function (...a) {
+      const ch = orig.apply(this, a);
+      ch.addEventListener('message', (e) => window.__frames.push(typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data)));
+      return ch;
+    };
+  });
   await tv.page.goto(`${BASE}/room/${code}/display`);
 
   // ---------- 4 friends join via the room URL (what the QR encodes) ----------
@@ -250,7 +275,16 @@ try {
   log('scores:', scores.join(' / '));
 
   // secrecy audit over every frame the TV ever received while turns were live
-  const states = tvFrames.map((f) => JSON.parse(f)).filter((m) => m.t === 'state');
+  if (PEER) tvFrames.push(...(await tv.page.evaluate(() => window.__frames)));
+  const parse = (f) => {
+    try {
+      const m = JSON.parse(f);
+      return m.__peerData !== undefined ? m : m;
+    } catch {
+      return null;
+    }
+  };
+  const states = tvFrames.map(parse).filter((m) => m && m.t === 'state');
   const liveStates = states.filter((m) => m.view.phase === 'turn-live');
   const leaked = states.filter((m) => m.view.turn?.card || (m.view.phase !== 'turn-review' && m.view.turn?.revealed));
   assert(liveStates.length > 20 && leaked.length === 0, `TV got ${liveStates.length} live-turn states over the wire; none carried a secret card`);
@@ -270,9 +304,18 @@ try {
   assert(reset.every((s) => s === '0'), 'rematch resets scores and starts turn 1');
   await tv.page.screenshot({ path: `${SHOTS}/12-tv-rematch.png` });
 
-  // persistence: restart-safe snapshot written
-  await host.page.waitForTimeout(2500);
-  assert(fs.existsSync(dataFile) && fs.readFileSync(dataFile, 'utf8').includes(code), 'room snapshot persisted to disk');
+  if (!PEER) {
+    // persistence: restart-safe snapshot written
+    await host.page.waitForTimeout(2500);
+    assert(fs.existsSync(dataFile) && fs.readFileSync(dataFile, 'utf8').includes(code), 'room snapshot persisted to disk');
+  } else {
+    // the host refreshes their tab: the room must come back from their device and everyone reconnects
+    await host.page.reload();
+    await host.page.waitForSelector('main.phase-turn-ready', { timeout: 30000 });
+    await players[2].page.waitForSelector('main.phase-turn-ready', { timeout: 30000 });
+    await players[2].page.locator('.conn-banner').waitFor({ state: 'detached', timeout: 30000 });
+    assert(true, 'host refreshed mid-match: room restored from the host device and guests reconnected');
+  }
 
   console.log('\nALL GOOD ✅');
 } catch (e) {

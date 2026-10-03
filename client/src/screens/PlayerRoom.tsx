@@ -4,6 +4,7 @@ import type { RoomView } from '../../../shared/types';
 import { navigate } from '../nav';
 import { getProfile, recordMatch, setProfile, store, useRoom, type RoomConn } from '../net';
 import { useVoice, VoiceCtx } from '../voice';
+import { stopHosting } from '../host';
 import { VoiceButton } from './VoiceButton';
 import { buzz, isMuted, setMuted, sfx } from '../sfx';
 import { ConnBanner, FxLayer, Toast } from '../ui';
@@ -85,6 +86,11 @@ export function PlayerRoom({ code }: { code: string }) {
     <VoiceCtx.Provider value={voice}>
     <main className={`room phase-${view.phase} role-${view.me.role}`}>
       {!(view.phase === 'turn-live' && view.me.role === 'describer') && <TopBar view={view} conn={conn} />}
+      {conn.isHostDevice && view.phase === 'lobby' && (
+        <div className="host-note" role="note">
+          📡 This device is hosting the room — keep this tab open (it’s fine to switch apps briefly).
+        </div>
+      )}
       {view.phase === 'lobby' && <Lobby view={view} conn={conn} />}
       {inTurn && <TurnScreen view={view} conn={conn} />}
       {view.phase === 'turn-review' && <Review view={view} conn={conn} />}
@@ -147,8 +153,9 @@ function TopBar({ view, conn }: { view: RoomView; conn: RoomConn }) {
           <button
             className="menu-item"
             onClick={() => {
-              if (!confirm('Leave this room? You can rejoin with the code.')) return;
+              if (!confirm(conn.isHostDevice ? 'You’re hosting from this device — leaving ends the room for everyone. Leave?' : 'Leave this room? You can rejoin with the code.')) return;
               conn.leave();
+              if (conn.isHostDevice) stopHosting(view.code);
               navigate('/');
             }}
           >

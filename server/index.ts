@@ -21,7 +21,7 @@ const MIME: Record<string, string> = {
 };
 
 function json(res: http.ServerResponse, code: number, body: unknown) {
-  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' });
   res.end(JSON.stringify(body));
 }
 
@@ -41,6 +41,7 @@ const aiHits = new Map<string, number[]>();
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://x');
   try {
+    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) return json(res, 204, {});
     if (url.pathname === '/api/rooms' && req.method === 'POST') return json(res, 200, { code: rooms.createRoom() });
     const m = url.pathname.match(/^\/api\/rooms\/([A-Za-z]{4})$/);
     if (m) return json(res, rooms.has(m[1]) ? 200 : 404, { exists: rooms.has(m[1]) });
