@@ -7,7 +7,7 @@ function seeded(seed = 1) {
 
 function room(n: number) {
   const s = createRoom('ABCD', 0);
-  for (let i = 0; i < n; i++) addPlayer(s, { id: `p${i}`, name: `P${i}`, avatar: i }, i);
+  for (let i = 0; i < n; i++) addPlayer(s, { id: `p${i}`, name: `P${i}`, look: null }, i);
   return s;
 }
 

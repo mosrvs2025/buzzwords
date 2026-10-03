@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { randomLook, sanitizeLook, type Look } from '../../shared/looks';
 import type { Action, ClientMsg, GameEvent, RoomView, ServerMsg } from '../../shared/types';
 
 export type Status = 'connecting' | 'open' | 'reconnecting';
@@ -30,12 +31,32 @@ export const store = {
 
 export interface Profile {
   name: string;
-  avatar: number;
+  look: Look;
 }
-export const getProfile = () => store.get<Profile>('bw:profile');
+export function getProfile(): Profile | null {
+  const p = store.get<Partial<Profile>>('bw:profile');
+  if (!p) return null;
+  return { name: p.name ?? '', look: p.look ? sanitizeLook(p.look) : randomLook() };
+}
 export const setProfile = (p: Profile) => store.set('bw:profile', p);
 
+/** Local progress drives cosmetic unlocks until accounts exist. */
+export interface Progress {
+  games: number;
+  wins: number;
+  lastMatch?: string;
+}
+export const getProgress = (): Progress => store.get<Progress>('bw:progress') ?? { games: 0, wins: 0 };
+export function recordMatch(key: string, won: boolean): Progress {
+  const p = getProgress();
+  if (p.lastMatch === key) return p; // reconnects re-deliver nothing, but be safe
+  const next = { games: p.games + 1, wins: p.wins + (won ? 1 : 0), lastMatch: key };
+  store.set('bw:progress', next);
+  return next;
+}
+
 type Listener = (ev: GameEvent) => void;
+type RtcListener = (from: string, data: unknown) => void;
 
 /**
  * One socket per screen. Owns reconnects, identity (seat token per room),
@@ -49,6 +70,8 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   const [toast, setToast] = useState<{ msg: string; id: number } | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const listeners = useRef(new Set<Listener>());
+  const rtcListeners = useRef(new Set<RtcListener>());
+  const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
   const offset = useRef(0);
   const bestRtt = useRef(Infinity);
   const pendingJoin = useRef<Profile | null>(null);
@@ -109,6 +132,16 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
         } else if (m.t === 'state') {
           setView(m.view);
           setNeedsName(false);
+        } else if (m.t === 'rtc') {
+          rtcListeners.current.forEach((l) => l(m.from, m.data));
+        } else if (m.t === 'speak') {
+          setSpeaking((prev) => {
+            if (prev.has(m.id) === m.on) return prev;
+            const next = new Set(prev);
+            if (m.on) next.add(m.id);
+            else next.delete(m.id);
+            return next;
+          });
         } else if (m.t === 'event') {
           listeners.current.forEach((l) => l(m.ev));
         } else if (m.t === 'error') {
@@ -123,6 +156,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
         clearInterval(pinger);
         if (ws.current !== sock || closedForGood.current) return;
         setStatus('reconnecting');
+        setSpeaking(new Set());
         attempt++;
         retry = setTimeout(connect, Math.min(4000, 300 * 2 ** attempt));
       };
@@ -161,10 +195,14 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
     listeners.current.add(l);
     return () => void listeners.current.delete(l);
   }, []);
+  const onRtc = useCallback((l: RtcListener) => {
+    rtcListeners.current.add(l);
+    return () => void rtcListeners.current.delete(l);
+  }, []);
   const serverNow = useCallback(() => Date.now() + offset.current, []);
   const leave = useCallback(() => store.set(idKey(code), null), [code]);
 
-  return { status, view, needsName, fatal, toast, send, join, onEvent, serverNow, leave };
+  return { status, view, needsName, fatal, toast, send, raw, join, onEvent, onRtc, speaking, serverNow, leave };
 }
 
 export type RoomConn = ReturnType<typeof useRoom>;

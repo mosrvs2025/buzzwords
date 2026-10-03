@@ -1,3 +1,4 @@
+import { DEFAULT_LOOK } from '../../../shared/looks';
 import { useEffect, useRef, useState } from 'react';
 import { MODES } from '../../../shared/modes';
 import { REACTIONS } from '../../../shared/style';
@@ -5,7 +6,8 @@ import type { RoomView } from '../../../shared/types';
 import { Avatar } from '../Avatar';
 import { useNow, type RoomConn } from '../net';
 import { buzz, sfx } from '../sfx';
-import { Pips, playerById, teamStyle, TimerRing, useCountdown } from '../ui';
+import { membersOf, Pips, playerById, Seat, Stage, teamStyle, TimerRing, useCountdown } from '../ui';
+import { VoiceButton } from './VoiceButton';
 
 export function TurnScreen({ view, conn }: { view: RoomView; conn: RoomConn }) {
   const now = useNow(conn.serverNow, 100);
@@ -41,7 +43,7 @@ export function TurnScreen({ view, conn }: { view: RoomView; conn: RoomConn }) {
         </div>
         {role === 'describer' ? (
           <>
-            <Avatar seed={describer!.avatar} color={st.color} size={140} mood="talk" />
+            <Avatar look={describer!.look} ring={st.color} size={140} mood="talk" />
             <h1 className="shout">You’re up!</h1>
             <p className="lead">
               Describe as many words as you can in <b>{view.settings.turnSeconds}s</b>. Don’t say the word
@@ -64,7 +66,7 @@ export function TurnScreen({ view, conn }: { view: RoomView; conn: RoomConn }) {
           </>
         ) : (
           <>
-            <Avatar seed={describer?.avatar ?? 0} color={st.color} size={140} mood={describer?.connected ? 'idle' : 'sleep'} />
+            <Avatar look={describer?.look ?? DEFAULT_LOOK} ring={st.color} size={140} mood={describer?.connected ? 'idle' : 'sleep'} />
             <h1 className="shout">{describer?.name ?? '…'} is up</h1>
             <p className="lead">
               {role === 'guesser' && <>You’re guessing! Get loud. 📣</>}
@@ -77,6 +79,7 @@ export function TurnScreen({ view, conn }: { view: RoomView; conn: RoomConn }) {
               {role === 'spectator' && <>Grab some popcorn 🍿</>}
             </p>
             <p className="waiting">Waiting for {describer?.name} to hit start…</p>
+            <Stage view={view} speaking={conn.speaking} size={72} exclude={describer?.id} />
             {isHost && (
               <button className="btn" onClick={() => conn.send({ type: 'passTurn' })}>
                 {describer?.connected ? 'Pick another describer' : `${describer?.name} is away — skip to a teammate`}
@@ -112,12 +115,9 @@ export function TurnScreen({ view, conn }: { view: RoomView; conn: RoomConn }) {
       {role === 'judge' && turn.card && cd.pre === 0 ? (
         <JudgeCard view={view} conn={conn} />
       ) : (
-        <div className="guess-stage">
-          <Avatar seed={describer?.avatar ?? 0} color={st.color} size={150} mood="talk" />
-          <h1 className="shout">{role === 'guesser' ? 'SHOUT IT!' : `${describer?.name} is describing`}</h1>
-          <p className="lead">{role === 'guesser' ? `${describer?.name} is describing. Guess out loud — no typing!` : 'Keep your poker face.'}</p>
-        </div>
+        <h1 className="shout small">{role === 'guesser' ? 'SHOUT IT!' : `${describer?.name} is describing`}</h1>
       )}
+      <Stage view={view} speaking={conn.speaking} size={role === 'judge' ? 70 : 92} />
       <ReactionBar conn={conn} />
     </div>
   );
@@ -186,6 +186,14 @@ function DescriberLive({
           <span className="pts">{turn.points > 0 ? `+${turn.points}` : turn.points}</span>
           {turn.streak >= 2 && <span className="streak">🔥{turn.streak}</span>}
         </div>
+      </div>
+      <div className="mate-strip" aria-label="Your guessers">
+        {membersOf(view, turn.teamId)
+          .filter((p) => p.id !== turn.describerId)
+          .map((p) => (
+            <Seat key={p.id} view={view} p={p} speaking={conn.speaking.has(p.id)} size={48} showSticker={false} />
+          ))}
+        <VoiceButton compact />
       </div>
       <div
         className="word-zone"

@@ -44,6 +44,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/rooms' && req.method === 'POST') return json(res, 200, { code: rooms.createRoom() });
     const m = url.pathname.match(/^\/api\/rooms\/([A-Za-z]{4})$/);
     if (m) return json(res, rooms.has(m[1]) ? 200 : 404, { exists: rooms.has(m[1]) });
+    if (url.pathname === '/api/ice') {
+      // STUN works for most home networks; set TURN_* for strict NATs / corporate Wi-Fi
+      const ice: { urls: string | string[]; username?: string; credential?: string }[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+      if (process.env.TURN_URL) ice.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
+      return json(res, 200, { iceServers: ice });
+    }
     if (url.pathname === '/api/health') return json(res, 200, { ok: true, rooms: rooms.rooms.size, ai: aiEnabled() });
     if (url.pathname === '/api/generate-deck' && req.method === 'POST') {
       if (!aiEnabled()) return json(res, 501, { error: 'AI decks aren’t switched on for this server yet.' });

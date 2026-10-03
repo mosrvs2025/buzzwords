@@ -1,3 +1,4 @@
+import { DEFAULT_LOOK } from '../../../shared/looks';
 import { useEffect, useRef, useState } from 'react';
 import { MODES } from '../../../shared/modes';
 import { TEAM_STYLES } from '../../../shared/style';
@@ -29,7 +30,7 @@ export function Display({ code }: { code: string }) {
           🔊 Click for sound + fullscreen
         </button>
       )}
-      {view.phase === 'lobby' && <DisplayLobby view={view} />}
+      {view.phase === 'lobby' && <DisplayLobby view={view} conn={conn} />}
       {(view.phase === 'turn-ready' || view.phase === 'turn-live') && <DisplayTurn view={view} conn={conn} />}
       {view.phase === 'turn-review' && (
         <div className="display-pane">
@@ -44,7 +45,7 @@ export function Display({ code }: { code: string }) {
   );
 }
 
-function DisplayLobby({ view }: { view: RoomView }) {
+function DisplayLobby({ view, conn }: { view: RoomView; conn: RoomConn }) {
   const mode = MODES[view.settings.modeId];
   return (
     <div className="d-lobby">
@@ -75,8 +76,8 @@ function DisplayLobby({ view }: { view: RoomView }) {
               <h2>{st.name}</h2>
               <div className="d-team-members">
                 {m.map((p) => (
-                  <div key={p.id} className="d-member pop-in">
-                    <Avatar seed={p.avatar} color={st.color} size={88} mood={!p.connected ? 'sleep' : p.ready ? 'happy' : 'idle'} />
+                  <div key={p.id} className={`d-member pop-in ${conn.speaking.has(p.id) ? 'speaking' : ''}`}>
+                    <Avatar look={p.look} ring={st.color} size={88} mood={!p.connected ? 'sleep' : p.ready ? 'happy' : 'idle'} />
                     <span>
                       {p.name} {p.ready && '✓'}
                     </span>
@@ -125,16 +126,16 @@ function DisplayTurn({ view, conn }: { view: RoomView; conn: RoomConn }) {
           Turn {turn.number}/{view.totalTurns} · <b>{st.name}</b>
         </div>
         <div className="d-center">
-          <div className="d-describer">
-            <Avatar seed={describer?.avatar ?? 0} color={st.color} size={220} mood={live ? mood : describer?.connected ? 'idle' : 'sleep'} />
+          <div className={`d-describer ${describer && conn.speaking.has(describer.id) ? 'speaking' : ''}`}>
+            <Avatar look={describer?.look ?? DEFAULT_LOOK} ring={st.color} size={220} mood={live ? mood : describer?.connected ? 'idle' : 'sleep'} />
             <div className="d-name">{describer?.name}</div>
             <div className="d-role">{live ? 'is describing…' : 'is up next!'}</div>
           </div>
           <TimerRing frac={live ? cd.frac : 1} left={live ? cd.left : view.settings.turnSeconds} size={300} color={st.color} />
           <div className="d-guessers">
             {guessers.map((p) => (
-              <div key={p.id} className="d-member">
-                <Avatar seed={p.avatar} color={st.color} size={110} mood={live ? (mood === 'happy' ? 'happy' : 'shock') : 'idle'} />
+              <div key={p.id} className={`d-member ${conn.speaking.has(p.id) ? 'speaking' : ''}`}>
+                <Avatar look={p.look} ring={st.color} size={110} mood={live ? (mood === 'happy' ? 'happy' : 'shock') : 'idle'} />
                 <span>{p.name}</span>
               </div>
             ))}
@@ -169,7 +170,7 @@ function Scoreboard({ view }: { view: RoomView }) {
             </span>
             <span className="sb-avatars">
               {membersOf(view, t.id).map((p) => (
-                <Avatar key={p.id} seed={p.avatar} color={st.color} size={34} bob={false} mood={p.connected ? 'idle' : 'sleep'} />
+                <Avatar key={p.id} look={p.look} ring={st.color} size={34} bob={false} mood={p.connected ? 'idle' : 'sleep'} />
               ))}
             </span>
           </div>

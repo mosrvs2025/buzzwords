@@ -15,16 +15,85 @@ export const playerById = (view: RoomView, id: string | null | undefined) => vie
 export const membersOf = (view: RoomView, teamId: string) =>
   view.players.filter((p) => p.teamId === teamId).sort((a, b) => a.joinedAt - b.joinedAt);
 
-export function PlayerChip({ view, p, mood, size = 44, extra }: { view: RoomView; p: Player; mood?: Mood; size?: number; extra?: React.ReactNode }) {
+/** What the little sticker on someone's seat says, from *this* viewer's point of view. */
+export function stickerFor(view: RoomView, p: Player): { text: string; kind: string } | null {
+  const t = view.turn;
+  if (!p.connected) return { text: 'Away', kind: 'away' };
+  if (t && (view.phase === 'turn-ready' || view.phase === 'turn-live' || view.phase === 'turn-review')) {
+    if (p.id === t.describerId) {
+      // judges are allowed to see the word, so it rides on the describer's head
+      if (view.phase === 'turn-live' && view.me.role === 'judge' && t.card) return { text: t.card.word, kind: 'word' };
+      return { text: view.phase === 'turn-ready' ? 'Up next' : 'Describing', kind: 'describing' };
+    }
+    if (p.teamId === t.teamId) return { text: 'Guessing', kind: 'guessing' };
+    return { text: 'Judging', kind: 'judging' };
+  }
+  if (view.phase === 'lobby' && p.ready) return { text: 'Ready!', kind: 'ready' };
+  return null;
+}
+
+export function Seat({
+  view,
+  p,
+  speaking,
+  size = 92,
+  mood,
+  onClick,
+  showSticker = true,
+}: {
+  view: RoomView;
+  p: Player;
+  speaking: boolean;
+  size?: number;
+  mood?: Mood;
+  onClick?: () => void;
+  showSticker?: boolean;
+}) {
   const st = teamStyle(view, p.teamId);
+  const sticker = showSticker ? stickerFor(view, p) : null;
+  const m: Mood = mood ?? (!p.connected ? 'sleep' : speaking ? 'talk' : 'idle');
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className={`chip ${p.connected ? '' : 'offline'}`}>
-      <Avatar seed={p.avatar} color={st.color} size={size} mood={mood ?? (p.connected ? 'idle' : 'sleep')} />
-      <span className="chip-name">
+    <Tag
+      className={`seat ${speaking ? 'speaking' : ''} ${p.connected ? '' : 'offline'}`}
+      style={{ '--team': st.color, '--size': `${size}px` } as React.CSSProperties}
+      onClick={onClick}
+      aria-label={`${p.name}${p.id === view.me.id ? ' (you)' : ''}${sticker ? `, ${sticker.text}` : ''}${speaking ? ', talking' : ''}`}
+    >
+      <span className="seat-ring">
+        <Avatar look={p.look} ring={st.color} size={size} mood={m} bob={false} />
+        {sticker && <span className={`sticker ${sticker.kind}`}>{sticker.text}</span>}
+        {p.voice !== 'off' && <span className={`mic ${p.voice}`}>{p.voice === 'muted' ? '🔇' : '🎙️'}</span>}
+        {speaking && (
+          <span className="eq" aria-hidden>
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
+      </span>
+      <span className="seat-name">
         {p.name}
         {p.id === view.me.id && <em> (you)</em>}
       </span>
-      {extra}
+    </Tag>
+  );
+}
+
+/** Everyone in the room as round seats — the "who's who / who's talking" view. */
+export function Stage({ view, speaking, size = 84, exclude }: { view: RoomView; speaking: Set<string>; size?: number; exclude?: string }) {
+  const order = (p: Player) => {
+    const t = view.turn;
+    if (!t) return view.teams.findIndex((x) => x.id === p.teamId);
+    if (p.id === t.describerId) return -2;
+    return p.teamId === t.teamId ? -1 : view.teams.findIndex((x) => x.id === p.teamId);
+  };
+  const players = [...view.players].filter((p) => p.id !== exclude).sort((a, b) => order(a) - order(b) || a.joinedAt - b.joinedAt);
+  return (
+    <div className="stage-grid">
+      {players.map((p) => (
+        <Seat key={p.id} view={view} p={p} speaking={speaking.has(p.id)} size={size} />
+      ))}
     </div>
   );
 }

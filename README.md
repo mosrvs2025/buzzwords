@@ -14,6 +14,8 @@ Modes: **Classic**, **No-Go Zone** (forbidden clue words), **Blitz** (30s; skips
 Decks: 6 built-in decks, the room's anonymous **Word Jar**, and custom decks from the **Deck Studio** (`/decks`). The studio can generate a deck with AI when `ANTHROPIC_API_KEY` is set.
 
 ## Architecture
+- `shared/looks.ts`: avatar parts catalog + unlock rules (earned by games/wins; `pass` items reserved for a future shop). Rendered as SVG in `client/src/Avatar.tsx`.
+- Voice: opt-in WebRTC mesh (`client/src/voice.ts`), signaled over the game socket. Each phone detects its own talking and broadcasts it, so every screen (including the TV) highlights who is speaking. Set `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` for strict networks.
 - `shared/engine.ts`: the game rules as a pure reducer (`applyAction`, `tick`) plus `projectView`. `projectView` builds a separate view for each device: the word goes only to the describer and to judges, and it never goes to teammates or the display. This is where cheating prevention lives.
 - `server/`: one Node process with HTTP and WebSockets (`ws`). The server is authoritative for state, the timer and scoring. Each player gets a seat token, so reloading, sleeping or dropping offline brings you back to the same seat. Rooms are saved as JSON snapshots (`DATA_FILE`) so they survive restarts.
 - `client/`: React + Vite. Clocks are synced to the server so every timer agrees. Sound effects are synthesized (no assets). Haptics, swipe and keyboard controls are included.

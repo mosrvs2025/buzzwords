@@ -1,8 +1,12 @@
 import { useState } from 'react';
+import type { Look } from '../../../shared/looks';
 import { Avatar } from '../Avatar';
 import { navigate } from '../nav';
 import { setProfile, store } from '../net';
 import { ProfileForm } from './ProfileForm';
+
+const MASCOT_A: Look = { skin: 4, hair: 8, hairColor: 0, eyes: 1, brows: 1, facial: 0, glasses: 1, hat: 0, top: 1, topColor: 2 };
+const MASCOT_B: Look = { skin: 1, hair: 4, hairColor: 4, eyes: 1, brows: 2, facial: 3, glasses: 0, hat: 2, top: 0, topColor: 0 };
 
 export function Home() {
   const [code, setCode] = useState('');
@@ -10,7 +14,7 @@ export function Home() {
   const [err, setErr] = useState('');
   const [mode, setMode] = useState<'menu' | 'host'>('menu');
 
-  const host = async (p: { name: string; avatar: number }) => {
+  const host = async (p: { name: string; look: Look }) => {
     setBusy(true);
     setErr('');
     try {
@@ -37,7 +41,7 @@ export function Home() {
     <main className="home">
       <header className="hero">
         <div className="marquee">
-          <Avatar seed={3} color="#FF4D2E" size={64} mood="talk" />
+          <Avatar look={MASCOT_A} ring="#FF4D2E" size={64} mood="talk" />
           <h1 className="logo" aria-label="Buzzwords">
             {'BUZZWORDS'.split('').map((ch, i) => (
               <span key={i} style={{ animationDelay: `${i * 0.06}s` }}>
@@ -45,7 +49,7 @@ export function Home() {
               </span>
             ))}
           </h1>
-          <Avatar seed={14} color="#00B8A9" size={64} mood="shock" />
+          <Avatar look={MASCOT_B} ring="#00B8A9" size={64} mood="shock" />
         </div>
         <p className="tag">Describe the word. Don’t say the word. <b>Shout the word.</b></p>
       </header>

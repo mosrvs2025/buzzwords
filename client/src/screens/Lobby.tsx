@@ -100,7 +100,7 @@ export function Lobby({ view, conn }: { view: RoomView; conn: RoomConn }) {
                   {members.map((p) => (
                     <li key={p.id}>
                       <button
-                        className={`member ${p.connected ? '' : 'offline'}`}
+                        className={`member ${p.connected ? '' : 'offline'} ${conn.speaking.has(p.id) ? 'speaking' : ''}`}
                         disabled={!isHost}
                         title={isHost ? 'Tap to move to the next team' : undefined}
                         onClick={() => {
@@ -108,11 +108,12 @@ export function Lobby({ view, conn }: { view: RoomView; conn: RoomConn }) {
                           conn.send({ type: 'setTeam', playerId: p.id, teamId: view.teams[(i + 1) % view.teams.length].id });
                         }}
                       >
-                        <Avatar seed={p.avatar} color={st.color} size={40} mood={!p.connected ? 'sleep' : p.ready ? 'happy' : 'idle'} />
+                        <Avatar look={p.look} ring={st.color} size={40} mood={!p.connected ? 'sleep' : conn.speaking.has(p.id) ? 'talk' : p.ready ? 'happy' : 'idle'} bob={false} />
                         <span className="name">
                           {p.name}
                           {p.id === me.id && <em> (you)</em>}
                           {p.id === view.hostId && <span className="host-badge">HOST</span>}
+                          {p.voice !== 'off' && <span className="host-badge mic-badge">{p.voice === 'muted' ? '🔇' : '🎙️'}</span>}
                         </span>
                         <span className={`ready-dot ${p.ready ? 'on' : ''}`} aria-label={p.ready ? 'ready' : 'not ready'}>
                           {p.ready ? '✓' : ''}

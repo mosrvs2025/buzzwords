@@ -1,3 +1,4 @@
+import { DEFAULT_LOOK, type Look } from '../../../shared/looks';
 import { useMemo } from 'react';
 import { TEAM_STYLES } from '../../../shared/style';
 import type { RoomView, WordOutcome } from '../../../shared/types';
@@ -23,7 +24,7 @@ export function Review({ view, conn, big = false }: { view: RoomView; conn?: Roo
   return (
     <div className={`review ${big ? 'big' : ''}`} style={{ '--team': st.color, '--team-soft': st.soft } as React.CSSProperties}>
       <div className="review-head">
-        <Avatar seed={describer?.avatar ?? 0} color={st.color} size={big ? 140 : 90} mood={turn.points >= 5 ? 'happy' : turn.points <= 0 ? 'sad' : 'idle'} />
+        <Avatar look={describer?.look ?? DEFAULT_LOOK} ring={st.color} size={big ? 140 : 90} mood={turn.points >= 5 ? 'happy' : turn.points <= 0 ? 'sad' : 'idle'} />
         <div>
           <div className="eyebrow">Time! {st.name}</div>
           <div className="big-points">{turn.points > 0 ? `+${turn.points}` : turn.points}</div>
@@ -76,15 +77,15 @@ export function useAwards(view: RoomView) {
       .map(([id, s]) => ({ p: playerById(view, id), s }))
       .filter((x) => x.p);
     const top = <K extends keyof (typeof entries)[0]['s']>(k: K) => [...entries].sort((a, b) => b.s[k] - a.s[k])[0];
-    const out: { title: string; who: string; avatar: number; teamId: string | null; detail: string }[] = [];
+    const out: { title: string; who: string; look: Look; teamId: string | null; detail: string }[] = [];
     const mvp = top('correct');
-    if (mvp && mvp.s.correct > 0) out.push({ title: 'Silver Tongue', who: mvp.p!.name, avatar: mvp.p!.avatar, teamId: mvp.p!.teamId, detail: `${mvp.s.correct} words described` });
+    if (mvp && mvp.s.correct > 0) out.push({ title: 'Silver Tongue', who: mvp.p!.name, look: mvp.p!.look, teamId: mvp.p!.teamId, detail: `${mvp.s.correct} words described` });
     const streak = top('bestStreak');
-    if (streak && streak.s.bestStreak >= 3) out.push({ title: 'On Fire', who: streak.p!.name, avatar: streak.p!.avatar, teamId: streak.p!.teamId, detail: `${streak.s.bestStreak} in a row` });
+    if (streak && streak.s.bestStreak >= 3) out.push({ title: 'On Fire', who: streak.p!.name, look: streak.p!.look, teamId: streak.p!.teamId, detail: `${streak.s.bestStreak} in a row` });
     const skip = top('skips');
-    if (skip && skip.s.skips >= 3) out.push({ title: 'Skip Happens', who: skip.p!.name, avatar: skip.p!.avatar, teamId: skip.p!.teamId, detail: `${skip.s.skips} skips` });
+    if (skip && skip.s.skips >= 3) out.push({ title: 'Skip Happens', who: skip.p!.name, look: skip.p!.look, teamId: skip.p!.teamId, detail: `${skip.s.skips} skips` });
     const cop = top('buzzes');
-    if (cop && cop.s.buzzes > 0) out.push({ title: 'Word Police', who: cop.p!.name, avatar: cop.p!.avatar, teamId: cop.p!.teamId, detail: `${cop.s.buzzes} buzzes` });
+    if (cop && cop.s.buzzes > 0) out.push({ title: 'Word Police', who: cop.p!.name, look: cop.p!.look, teamId: cop.p!.teamId, detail: `${cop.s.buzzes} buzzes` });
     return out;
   }, [view]);
 }
@@ -116,7 +117,7 @@ export function Final({ view, conn, big = false }: { view: RoomView; conn?: Room
             <div key={t.id} className={`step rank${rank}`} style={{ '--team': st.color, '--team-deep': st.deep } as React.CSSProperties}>
               <div className="step-avatars">
                 {membersOf(view, t.id).map((p) => (
-                  <Avatar key={p.id} seed={p.avatar} color={st.color} size={big ? 72 : 44} mood={won ? 'happy' : 'sad'} />
+                  <Avatar key={p.id} look={p.look} ring={st.color} size={big ? 72 : 44} mood={won ? 'happy' : 'sad'} />
                 ))}
               </div>
               <div className="step-block">
@@ -132,7 +133,7 @@ export function Final({ view, conn, big = false }: { view: RoomView; conn?: Room
         <div className="awards">
           {awards.map((a) => (
             <div className="award" key={a.title}>
-              <Avatar seed={a.avatar} color={teamStyle(view, a.teamId).color} size={44} mood="happy" bob={false} />
+              <Avatar look={a.look} ring={teamStyle(view, a.teamId).color} size={44} mood="happy" bob={false} />
               <div>
                 <b>{a.title}</b>
                 <span>

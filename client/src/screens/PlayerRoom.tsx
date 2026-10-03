@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TEAM_STYLES } from '../../../shared/style';
 import type { RoomView } from '../../../shared/types';
 import { navigate } from '../nav';
-import { getProfile, store, useRoom, type RoomConn } from '../net';
+import { getProfile, recordMatch, setProfile, store, useRoom, type RoomConn } from '../net';
+import { useVoice, VoiceCtx } from '../voice';
+import { VoiceButton } from './VoiceButton';
 import { buzz, isMuted, setMuted, sfx } from '../sfx';
 import { ConnBanner, FxLayer, Toast } from '../ui';
 import { Lobby } from './Lobby';
@@ -24,6 +26,21 @@ export function PlayerRoom({ code }: { code: string }) {
   }, [needsName, code, conn]);
 
   useGameSounds(conn, view);
+  const voice = useVoice(conn, view);
+
+  // local progress → cosmetic unlocks
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  useEffect(
+    () =>
+      conn.onEvent((ev) => {
+        const v = viewRef.current;
+        if (ev.kind !== 'match-end' || !v?.me.id) return;
+        const myTeam = v.players.find((p) => p.id === v.me.id)?.teamId;
+        recordMatch(`${v.code}:${v.matchNumber}`, !!myTeam && ev.winners.includes(myTeam));
+      }),
+    [conn],
+  );
 
   if (fatal) {
     return (
@@ -65,6 +82,7 @@ export function PlayerRoom({ code }: { code: string }) {
 
   const inTurn = view.phase === 'turn-ready' || view.phase === 'turn-live';
   return (
+    <VoiceCtx.Provider value={voice}>
     <main className={`room phase-${view.phase} role-${view.me.role}`}>
       {!(view.phase === 'turn-live' && view.me.role === 'describer') && <TopBar view={view} conn={conn} />}
       {view.phase === 'lobby' && <Lobby view={view} conn={conn} />}
@@ -75,12 +93,14 @@ export function PlayerRoom({ code }: { code: string }) {
       <ConnBanner status={conn.status} />
       <Toast toast={conn.toast} />
     </main>
+    </VoiceCtx.Provider>
   );
 }
 
 function TopBar({ view, conn }: { view: RoomView; conn: RoomConn }) {
   const [muted, setM] = useState(isMuted());
   const [menu, setMenu] = useState(false);
+  const [closet, setCloset] = useState(false);
   const isHost = view.hostId === view.me.id;
   const playing = view.phase !== 'lobby';
   return (
@@ -96,6 +116,7 @@ function TopBar({ view, conn }: { view: RoomView; conn: RoomConn }) {
         </div>
       )}
       <div className="tb-right">
+        <VoiceButton />
         <button
           className="icon-btn"
           aria-label={muted ? 'Unmute' : 'Mute'}
@@ -112,6 +133,9 @@ function TopBar({ view, conn }: { view: RoomView; conn: RoomConn }) {
       </div>
       {menu && (
         <div className="menu" onClick={() => setMenu(false)}>
+          <button className="menu-item" onClick={() => setCloset(true)}>
+            👕 Change my look
+          </button>
           <a className="menu-item" href={`/room/${view.code}/display`} target="_blank" rel="noreferrer">
             📺 Open TV display
           </a>
@@ -130,6 +154,23 @@ function TopBar({ view, conn }: { view: RoomView; conn: RoomConn }) {
           >
             🚪 Leave room
           </button>
+        </div>
+      )}
+      {closet && (
+        <div className="modal" role="dialog" aria-label="Change my look" onClick={(e) => e.target === e.currentTarget && setCloset(false)}>
+          <div className="card modal-card">
+            <button className="link back" onClick={() => setCloset(false)}>
+              ✕ close
+            </button>
+            <ProfileForm
+              cta="Save look"
+              onSubmit={(p) => {
+                setProfile(p);
+                conn.send({ type: 'rename', name: p.name, look: p.look });
+                setCloset(false);
+              }}
+            />
+          </div>
         </div>
       )}
     </header>

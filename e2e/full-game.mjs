@@ -29,13 +29,17 @@ for (let i = 0; i < 50; i++) {
   await new Promise((r) => setTimeout(r, 200));
 }
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM || undefined,
+  // a fake mic that emits a beep — lets us test real WebRTC voice + talk detection headlessly
+  args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+});
 const phone = devices['Pixel 7'];
 let failed = false;
 
 try {
   const mk = async (opts = phone) => {
-    const ctx = await browser.newContext(opts);
+    const ctx = await browser.newContext({ ...opts, permissions: ['microphone'] });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => console.log('[pageerror]', e.message));
     return { ctx, page };
@@ -84,6 +88,36 @@ try {
   await players[1].page.getByRole('button', { name: 'Drop' }).click();
   await host.page.getByText('1 secret word').waitFor();
   assert(!(await host.page.getByText('Grandma’s meatloaf').count()), 'jar words are anonymous/hidden from others');
+
+  // ---------- voice chat: Ava + Ben join, real WebRTC audio flows, talk indicators light up ----------
+  await host.page.getByRole('button', { name: /Join voice/ }).click();
+  await players[1].page.getByRole('button', { name: /Join voice/ }).click();
+  await players[1].page.waitForFunction(() => {
+    const a = document.querySelector('audio[data-peer]');
+    return a && a.srcObject && a.srcObject.getAudioTracks().length > 0;
+  }, null, { timeout: 15000 });
+  await host.page.waitForFunction(() => !!document.querySelector('audio[data-peer]')?.srcObject, null, { timeout: 15000 });
+  assert(true, 'Ava ↔ Ben connected peer-to-peer and receive each other’s audio');
+  await players[2].page.locator('.member.speaking').first().waitFor({ timeout: 15000 });
+  assert(true, 'Cleo (not in voice) sees who is talking in the lobby');
+  await tv.page.locator('.d-member.speaking').first().waitFor({ timeout: 15000 });
+  assert(true, 'TV lights up whoever is talking');
+  await host.page.getByRole('button', { name: 'Mute mic' }).click();
+  await players[2].page.locator('.mic-badge', { hasText: '🔇' }).waitFor();
+  assert(true, 'mute state syncs to everyone');
+  await host.page.getByRole('button', { name: 'Unmute mic' }).click();
+  await players[2].page.screenshot({ path: `${SHOTS}/02b-lobby-voice.png` });
+
+  // ---------- change look mid-lobby ----------
+  await players[3].page.getByRole('button', { name: 'Menu' }).click();
+  await players[3].page.getByRole('button', { name: /Change my look/ }).click();
+  await players[3].page.getByRole('tab', { name: /Extras/ }).click();
+  await players[3].page.getByRole('radio', { name: 'Headphones' }).click();
+  const catLocked = await players[3].page.getByRole('radio', { name: /Cat ears — locked/ }).count();
+  assert(catLocked === 1, 'Cat ears are locked before your first game');
+  await players[3].page.screenshot({ path: `${SHOTS}/02c-closet.png` });
+  await players[3].page.getByRole('button', { name: 'Save look' }).click();
+  await players[3].page.locator('.modal').waitFor({ state: 'detached' });
 
   // host: 30s turns
   await host.page.getByRole('button', { name: '30s' }).click();
@@ -135,6 +169,8 @@ try {
     for (const g of guessers) assert(!(await g.page.locator('body').innerText()).includes(word), `${g.name} (guesser) cannot see the word`);
     assert(!(await tv.page.locator('body').innerText()).includes(word), 'TV display cannot see the word');
     assert((await judges[0].page.locator('.judge-card .word').innerText()).trim() === word, `${judges[0].name} (judge) sees the word to police it`);
+    assert((await judges[1].page.locator('.sticker.word').innerText()).trim() === word, `${judges[1].name} sees the word as a sticker on the describer’s seat`);
+    assert((await guessers[0].page.locator('.sticker.describing').count()) === 1, `${guessers[0].name} sees a “Describing” sticker instead`);
 
     if (turn === 1) {
       // mark a few, a judge buzzes one, then let the clock run out
@@ -190,6 +226,7 @@ try {
       }
       await host.page.waitForSelector('main.phase-turn-review');
       const pts = await host.page.locator('.big-points').innerText();
+      if (pts !== '+13') console.log('  reveal:', (await host.page.locator('.reveal-list').innerText()).replace(/\n/g, ' | '));
       assert(pts === '+13', `clean sweep scores 10 + 3 bonus (${pts})`);
     }
     // a teammate banks the points
@@ -217,6 +254,14 @@ try {
   const liveStates = states.filter((m) => m.view.phase === 'turn-live');
   const leaked = states.filter((m) => m.view.turn?.card || (m.view.phase !== 'turn-review' && m.view.turn?.revealed));
   assert(liveStates.length > 20 && leaked.length === 0, `TV got ${liveStates.length} live-turn states over the wire; none carried a secret card`);
+
+  // unlock earned: one finished game → Cat ears available
+  await players[3].page.getByRole('button', { name: 'Menu' }).click();
+  await players[3].page.getByRole('button', { name: /Change my look/ }).click();
+  await players[3].page.getByRole('tab', { name: /Extras/ }).click();
+  assert((await players[3].page.getByRole('radio', { name: 'Cat ears' }).count()) === 1, 'finishing a match unlocked Cat ears');
+  await players[3].page.getByRole('radio', { name: 'Cat ears' }).click();
+  await players[3].page.getByRole('button', { name: 'Save look' }).click();
 
   // rematch
   await host.page.getByRole('button', { name: /Rematch/ }).click();

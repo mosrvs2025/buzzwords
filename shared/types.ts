@@ -1,3 +1,5 @@
+import type { Look } from './looks';
+
 // Core data model shared by server (authoritative) and client (presentation).
 
 export type Phase = 'lobby' | 'turn-ready' | 'turn-live' | 'turn-review' | 'final';
@@ -15,7 +17,9 @@ export interface Card {
 export interface Player {
   id: string;
   name: string;
-  avatar: number;
+  look: Look;
+  /** voice chat presence (WebRTC mesh, opt-in) */
+  voice: 'off' | 'on' | 'muted';
   teamId: string | null;
   connected: boolean;
   ready: boolean;
@@ -143,7 +147,8 @@ export interface RoomView {
 // ---- Actions (client -> server) ----
 
 export type Action =
-  | { type: 'rename'; name: string; avatar: number }
+  | { type: 'rename'; name: string; look: Look }
+  | { type: 'voice'; state: 'off' | 'on' | 'muted' }
   | { type: 'ready'; ready: boolean }
   | { type: 'setTeam'; playerId: string; teamId: string }
   | { type: 'shuffleTeams' }
@@ -180,13 +185,19 @@ export type GameEvent =
 // ---- Wire protocol ----
 
 export type ClientMsg =
-  | { t: 'hello'; room: string; playerId?: string; token?: string; name?: string; avatar?: number; display?: boolean }
+  | { t: 'hello'; room: string; playerId?: string; token?: string; name?: string; look?: Look; display?: boolean }
   | { t: 'action'; action: Action }
-  | { t: 'ping'; c: number };
+  | { t: 'ping'; c: number }
+  /** WebRTC signaling, relayed to one player in the same room */
+  | { t: 'rtc'; to: string; data: unknown }
+  /** local voice-activity flag, fanned out to the room */
+  | { t: 'speak'; on: boolean };
 
 export type ServerMsg =
   | { t: 'welcome'; playerId: string | null; token: string | null }
   | { t: 'state'; view: RoomView; now: number }
   | { t: 'event'; ev: GameEvent; now: number }
   | { t: 'error'; message: string; fatal?: boolean }
-  | { t: 'pong'; c: number; s: number };
+  | { t: 'pong'; c: number; s: number }
+  | { t: 'rtc'; from: string; data: unknown }
+  | { t: 'speak'; id: string; on: boolean };

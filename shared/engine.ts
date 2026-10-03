@@ -5,6 +5,7 @@
  */
 import { DECK_BY_ID } from './decks';
 import { MODES } from './modes';
+import { sanitizeLook, type Look } from './looks';
 import { TEAM_STYLES } from './style';
 import type {
   Action, Card, GameEvent, Player, Role, RoomState, RoomView, Settings, Team, Turn, TurnView, WordOutcome,
@@ -121,12 +122,13 @@ export function sanitizeWord(word: string): string {
   return word.replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32);
 }
 
-export function addPlayer(s: RoomState, p: { id: string; name: string; avatar: number }, now: number): Player {
+export function addPlayer(s: RoomState, p: { id: string; name: string; look: unknown }, now: number): Player {
   if (s.players.length >= MAX_PLAYERS) fail('Room is full');
   const player: Player = {
     id: p.id,
     name: uniqueName(s, sanitizeName(p.name)),
-    avatar: Math.abs(Math.floor(p.avatar)) % 1000,
+    look: sanitizeLook(p.look),
+    voice: 'off',
     teamId: null,
     connected: true,
     ready: false,
@@ -325,7 +327,11 @@ export function applyAction(s: RoomState, actorId: string, a: Action, now: numbe
   switch (a.type) {
     case 'rename': {
       me.name = uniqueName(s, sanitizeName(a.name), me.id);
-      me.avatar = Math.abs(Math.floor(a.avatar)) % 1000;
+      me.look = sanitizeLook(a.look);
+      return [];
+    }
+    case 'voice': {
+      me.voice = a.state === 'on' || a.state === 'muted' ? a.state : 'off';
       return [];
     }
     case 'ready':

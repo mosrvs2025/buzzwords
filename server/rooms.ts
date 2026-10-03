@@ -5,6 +5,7 @@ import type { WebSocket } from 'ws';
 import {
   addPlayer, applyAction, createRoom, GameError, projectView, removePlayer, tick,
 } from '../shared/engine';
+import { sanitizeLook } from '../shared/looks';
 import type { Action, ClientMsg, GameEvent, RoomState, ServerMsg } from '../shared/types';
 
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ'; // consonants only: no accidental words, no I/O/0 confusion
@@ -17,6 +18,7 @@ interface Conn {
   bucket: number;
   lastRefill: number;
   lastReact: number;
+  speaking: boolean;
 }
 
 interface RoomRecord {
@@ -45,7 +47,11 @@ export class RoomManager {
     try {
       const raw = JSON.parse(fs.readFileSync(this.dataFile, 'utf8')) as { state: RoomState; tokens: Record<string, string> }[];
       for (const r of raw) {
-        for (const p of r.state.players) p.connected = false;
+        for (const p of r.state.players) {
+          p.connected = false;
+          p.voice = 'off';
+          p.look ??= sanitizeLook(null); // snapshots from before avatars v2
+        }
         this.rooms.set(r.state.code, { state: r.state, tokens: r.tokens, conns: new Set() });
       }
       console.log(`[rooms] restored ${raw.length} room(s)`);
@@ -82,7 +88,7 @@ export class RoomManager {
 
   attach(ws: WebSocket) {
     let room: RoomRecord | null = null;
-    const conn: Conn = { ws, playerId: null, bucket: 30, lastRefill: Date.now(), lastReact: 0 };
+    const conn: Conn = { ws, playerId: null, bucket: 30, lastRefill: Date.now(), lastReact: 0, speaking: false };
 
     ws.on('message', (buf) => {
       // token bucket: 20 msg/s sustained, bursts of 30
@@ -112,6 +118,23 @@ export class RoomManager {
         }
         return;
       }
+      if (msg.t === 'rtc' && room && conn.playerId) {
+        // signaling only flows between players who both opted into voice
+        const me = room.state.players.find((p) => p.id === conn.playerId);
+        const them = room.state.players.find((p) => p.id === msg.to);
+        if (!me || !them || me.voice === 'off' || them.voice === 'off') return;
+        const data = JSON.stringify({ t: 'rtc', from: conn.playerId, data: msg.data });
+        if (data.length > 32_000) return;
+        for (const c of room.conns) if (c.playerId === msg.to && c.ws.readyState === 1) c.ws.send(data);
+        return;
+      }
+      if (msg.t === 'speak' && room && conn.playerId) {
+        const on = !!msg.on;
+        if (conn.speaking === on) return;
+        conn.speaking = on;
+        for (const c of room.conns) send(c.ws, { t: 'speak', id: conn.playerId, on });
+        return;
+      }
       if (msg.t === 'action' && room && conn.playerId) {
         if (msg.action?.type === 'react') {
           if (now - conn.lastReact < 250) return;
@@ -127,8 +150,10 @@ export class RoomManager {
       if (conn.playerId) {
         const p = room.state.players.find((x) => x.id === conn.playerId);
         const stillHere = [...room.conns].some((c) => c.playerId === conn.playerId);
+        if (conn.speaking) for (const c of room.conns) send(c.ws, { t: 'speak', id: conn.playerId, on: false });
         if (p && !stillHere) {
           p.connected = false;
+          p.voice = 'off';
           p.lastSeenAt = Date.now();
           this.broadcast(room);
         }
@@ -150,7 +175,7 @@ export class RoomManager {
     } else if (msg.name) {
       const id = randomBytes(6).toString('hex');
       const token = randomBytes(16).toString('hex');
-      const p = addPlayer(s, { id, name: msg.name, avatar: msg.avatar ?? 0 }, now);
+      const p = addPlayer(s, { id, name: msg.name, look: msg.look }, now);
       r.tokens[id] = token;
       conn.playerId = id;
       send(conn.ws, { t: 'welcome', playerId: id, token });
