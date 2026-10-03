@@ -264,6 +264,17 @@ function Settings({ view, conn, isHost }: { view: RoomView; conn: RoomConn; isHo
       </div>
 
       <h3>Decks</h3>
+      <div className="deck-quick">
+        <button className="btn small" onClick={() => set({ deckIds: DECKS.filter((d) => d.id !== 'spicy' && d.id !== 'work').map((d) => d.id) })}>
+          🎲 Everything (family-safe)
+        </button>
+        <button className="btn small" onClick={() => set({ deckIds: DECKS.map((d) => d.id) })}>
+          🌶️ Everything
+        </button>
+        <button className="btn small" onClick={() => set({ deckIds: ['family', 'animals', 'food', 'holidays'] })}>
+          🧸 Kids
+        </button>
+      </div>
       <div className="deck-grid">
         {DECKS.map((d) => {
           const on = s.deckIds.includes(d.id);

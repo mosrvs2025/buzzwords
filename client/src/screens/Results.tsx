@@ -5,6 +5,7 @@ import type { RoomView, WordOutcome } from '../../../shared/types';
 import { Avatar } from '../Avatar';
 import type { RoomConn } from '../net';
 import { sfx } from '../sfx';
+import { AnimatedNumber } from '../fx';
 import { Confetti, membersOf, playerById, standings, teamStyle } from '../ui';
 
 const OUTCOME_LABEL: Record<WordOutcome, string> = { correct: '✓', skip: '↷', foul: '✕ buzz', missed: '⏱' };
@@ -27,7 +28,9 @@ export function Review({ view, conn, big = false }: { view: RoomView; conn?: Roo
         <Avatar look={describer?.look ?? DEFAULT_LOOK} ring={st.color} size={big ? 140 : 90} mood={turn.points >= 5 ? 'happy' : turn.points <= 0 ? 'sad' : 'idle'} />
         <div>
           <div className="eyebrow">Time! {st.name}</div>
-          <div className="big-points">{turn.points > 0 ? `+${turn.points}` : turn.points}</div>
+          <div className="big-points">
+            <AnimatedNumber value={turn.points} prefixPlus from={0} />
+          </div>
           <div className="sub">
             {describer?.name} got {correct} of {turn.revealed?.length ?? 0}
             {turn.revealed?.length === turn.total && turn.outcomes.every((o) => o === 'correct') && ' — CLEAN SWEEP! 🧹'}
@@ -122,7 +125,9 @@ export function Final({ view, conn, big = false }: { view: RoomView; conn?: Room
               </div>
               <div className="step-block">
                 <span className="step-rank">{won ? '👑' : `#${rank + 1}`}</span>
-                <span className="step-score">{t.score}</span>
+                <span className="step-score">
+                  <AnimatedNumber value={t.score} from={0} />
+                </span>
                 <span className="step-name">{st.name}</span>
               </div>
             </div>

@@ -27,7 +27,7 @@ const fail = (msg: string): never => {
 };
 
 export function defaultSettings(): Settings {
-  return { modeId: 'classic', turnSeconds: 60, wordsPerTurn: 10, laps: 1, deckIds: ['party'], teamCount: 0, useRoomWords: true };
+  return { modeId: 'classic', turnSeconds: 60, wordsPerTurn: 10, laps: 1, deckIds: ['party', 'movies', 'food', 'animals', 'world', 'sports'], teamCount: 0, useRoomWords: true };
 }
 
 export function createRoom(code: string, now: number): RoomState {
@@ -301,8 +301,10 @@ function startMatch(s: RoomState, rng: Rng): GameEvent[] {
   }
   const maxSize = Math.max(...s.teams.map((t) => teamMembers(s, t.id).length));
   s.turnsPerTeam = Math.max(1, s.settings.laps * maxSize);
-  s.pool = shuffle(buildDeck(s), rng);
-  s.used = [];
+  // rematches keep the room's history so the same crew doesn't see repeats
+  const fresh = buildDeck(s).filter((c) => !s.used.includes(c.word));
+  if (fresh.length < s.settings.wordsPerTurn * s.teams.length * s.turnsPerTeam) s.used = [];
+  s.pool = shuffle(buildDeck(s).filter((c) => !s.used.includes(c.word)), rng);
   s.stats = { byPlayer: {}, history: [] };
   s.matchNumber++;
   setupTurn(s);

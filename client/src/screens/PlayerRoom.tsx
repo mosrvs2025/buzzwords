@@ -5,6 +5,7 @@ import { navigate } from '../nav';
 import { getProfile, recordMatch, setProfile, store, useRoom, type RoomConn } from '../net';
 import { useVoice, VoiceCtx } from '../voice';
 import { stopHosting } from '../host';
+import { AnimatedNumber, Moments } from '../fx';
 import { VoiceButton } from './VoiceButton';
 import { buzz, isMuted, setMuted, sfx } from '../sfx';
 import { ConnBanner, FxLayer, Toast } from '../ui';
@@ -96,6 +97,7 @@ export function PlayerRoom({ code }: { code: string }) {
       {view.phase === 'turn-review' && <Review view={view} conn={conn} />}
       {view.phase === 'final' && <Final view={view} conn={conn} />}
       <FxLayer conn={conn} view={view} />
+      <Moments conn={conn} view={view} />
       <ConnBanner status={conn.status} />
       <Toast toast={conn.toast} />
     </main>
@@ -116,7 +118,7 @@ function TopBar({ view, conn }: { view: RoomView; conn: RoomConn }) {
         <div className="mini-scores" aria-label="Scores">
           {view.teams.map((t) => (
             <span key={t.id} style={{ background: TEAM_STYLES[t.style].color }}>
-              {t.score}
+              <AnimatedNumber value={t.score} />
             </span>
           ))}
         </div>

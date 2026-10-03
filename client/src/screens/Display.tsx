@@ -8,6 +8,7 @@ import { useNow, useRoom, type RoomConn } from '../net';
 import { sfx, unlockAudio } from '../sfx';
 import { ConnBanner, FxLayer, joinUrl, membersOf, Pips, playerById, QR, teamStyle, TimerRing, useCountdown } from '../ui';
 import { Final, Review } from './Results';
+import { AnimatedNumber, Burst, Moments } from '../fx';
 
 /**
  * The shared screen (TV / laptop / projector). It connects as a "display"
@@ -40,6 +41,7 @@ export function Display({ code }: { code: string }) {
       )}
       {view.phase === 'final' && <Final view={view} big />}
       <FxLayer conn={conn} view={view} />
+      <Moments conn={conn} view={view} big />
       <ConnBanner status={conn.status} />
     </main>
   );
@@ -144,6 +146,9 @@ function DisplayTurn({ view, conn }: { view: RoomView; conn: RoomConn }) {
         </div>
         <div className="d-progress">
           <Pips total={turn.total} outcomes={turn.outcomes} cursor={live ? turn.cursor : -1} />
+          {turn.outcomes[turn.outcomes.length - 1] === 'correct' && (
+            <Burst id={turn.cursor} colors={[st.color, '#FFC22E', '#2FBF55', '#FFF7EA']} count={22} spread={260} />
+          )}
           <div className="d-points" key={turn.points}>
             {turn.points > 0 ? `+${turn.points}` : turn.points}
             {turn.streak >= 3 && <span className="streak">🔥 {turn.streak} in a row</span>}
@@ -165,9 +170,7 @@ function Scoreboard({ view }: { view: RoomView }) {
         return (
           <div key={t.id} className={`sb-team ${active ? 'active' : ''}`} style={{ '--team': st.color } as React.CSSProperties}>
             <span className="sb-name">{st.name}</span>
-            <span className="sb-score" key={t.score}>
-              {t.score}
-            </span>
+            <AnimatedNumber className="sb-score" value={t.score} />
             <span className="sb-avatars">
               {membersOf(view, t.id).map((p) => (
                 <Avatar key={p.id} look={p.look} ring={st.color} size={34} bob={false} mood={p.connected ? 'idle' : 'sleep'} />

@@ -178,9 +178,10 @@ try {
     log(`turn ${turn}: ${describer.name} describes → ${guessers.map((g) => g.name)} guess, ${judges.map((j) => j.name)} judge`);
     assert(guessers.length >= 1 && judges.length >= 2, 'roles assigned: 1 describer, teammates guess, other team judges');
 
+    if (turn === 2) await tv.page.waitForTimeout(500), await tv.page.screenshot({ path: `${SHOTS}/07a-tv-intro.png` });
     await describer.page.getByRole('button', { name: /Start my turn/ }).click();
-    await describer.page.locator('.word-card .word').waitFor({ timeout: 6000 });
-    const word = (await describer.page.locator('.word-card .word').innerText()).trim();
+    await describer.page.locator('.word-card:not(.leaving) .word').waitFor({ timeout: 6000 });
+    const word = (await describer.page.locator('.word-card:not(.leaving) .word').innerText()).trim();
     seenWords.push(word);
     log(`  secret word #1: ${word}`);
     if (turn === 1) {
@@ -200,7 +201,9 @@ try {
     if (turn === 1) {
       // mark a few, a judge buzzes one, then let the clock run out
       await describer.page.getByRole('button', { name: /Got it/ }).click();
-      await describer.page.waitForFunction((w) => document.querySelector('.word-card .word')?.textContent?.trim() !== w, word);
+      await describer.page.waitForTimeout(120);
+      await describer.page.screenshot({ path: `${SHOTS}/04b-describer-flyoff.png` });
+      await describer.page.waitForFunction((w) => document.querySelector('.word-card:not(.leaving) .word')?.textContent?.trim() !== w, word);
       await describer.page.getByRole('button', { name: /Got it/ }).click();
       await describer.page.waitForTimeout(150);
       await describer.page.getByRole('button', { name: /Skip/ }).click();
@@ -224,7 +227,7 @@ try {
 
       // describer reloads mid-turn and gets their card back
       await describer.page.reload();
-      await describer.page.locator('.word-card .word').waitFor({ timeout: 8000 });
+      await describer.page.locator('.word-card:not(.leaving) .word').waitFor({ timeout: 8000 });
       assert(true, 'describer reloaded mid-turn and got the live card back');
 
       log('  letting the 30s clock run out…');
@@ -245,11 +248,13 @@ try {
       // sweep: mark everything correct quickly (exercises zero-friction advancing)
       for (let i = 0; i < 10; i++) {
         if (await describer.page.locator('main.phase-turn-review').count()) break;
-        const before = await describer.page.locator('.word-card .word').innerText().catch(() => '');
+        const before = await describer.page.locator('.word-card:not(.leaving) .word').innerText().catch(() => '');
         await describer.page.keyboard.press('ArrowRight').catch(() => {});
-        if (i < 9) await describer.page.waitForFunction((w) => !document.querySelector('.word-card .word') || document.querySelector('.word-card .word').textContent !== w, before, { timeout: 3000 }).catch(() => {});
+        if (i < 9) await describer.page.waitForFunction((w) => !document.querySelector('.word-card:not(.leaving) .word') || document.querySelector('.word-card:not(.leaving) .word').textContent !== w, before, { timeout: 3000 }).catch(() => {});
       }
       await host.page.waitForSelector('main.phase-turn-review');
+      if (turn === 2) await tv.page.screenshot({ path: `${SHOTS}/08b-tv-sweep.png` });
+      await host.page.locator('.big-points', { hasText: '+13' }).waitFor({ timeout: 3000 }).catch(() => {});
       const pts = await host.page.locator('.big-points').innerText();
       if (pts !== '+13') console.log('  reveal:', (await host.page.locator('.reveal-list').innerText()).replace(/\n/g, ' | '));
       assert(pts === '+13', `clean sweep scores 10 + 3 bonus (${pts})`);
@@ -300,7 +305,8 @@ try {
   // rematch
   await host.page.getByRole('button', { name: /Rematch/ }).click();
   await host.page.waitForSelector('main.phase-turn-ready');
-  const reset = await host.page.locator('.mini-scores span').allInnerTexts();
+  await host.page.waitForFunction(() => [...document.querySelectorAll('.mini-scores > span')].every((e) => e.textContent.trim() === '0'), null, { timeout: 3000 }).catch(() => {});
+  const reset = await host.page.locator('.mini-scores > span').allInnerTexts();
   assert(reset.every((s) => s === '0'), 'rematch resets scores and starts turn 1');
   await tv.page.screenshot({ path: `${SHOTS}/12-tv-rematch.png` });
 

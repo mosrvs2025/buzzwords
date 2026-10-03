@@ -8,6 +8,7 @@ import { useNow, type RoomConn } from '../net';
 import { buzz, sfx } from '../sfx';
 import { membersOf, Pips, playerById, Seat, Stage, teamStyle, TimerRing, useCountdown } from '../ui';
 import { VoiceButton } from './VoiceButton';
+import { AnimatedNumber, Burst } from '../fx';
 
 export function TurnScreen({ view, conn }: { view: RoomView; conn: RoomConn }) {
   const now = useNow(conn.serverNow, 100);
@@ -102,12 +103,12 @@ export function TurnScreen({ view, conn }: { view: RoomView; conn: RoomConn }) {
   if (role === 'describer') return <DescriberLive view={view} conn={conn} cd={cd} countdown={countdown} color={st.color} />;
 
   return (
-    <div className={`turn-live watcher ${role}`} style={{ '--team': st.color, '--team-deep': st.deep, '--team-soft': st.soft } as React.CSSProperties}>
+    <div className={`turn-live watcher ${role} ${cd.live && cd.left <= 10 ? 'urgent' : ''}`} style={{ '--team': st.color, '--team-deep': st.deep, '--team-soft': st.soft } as React.CSSProperties}>
       {countdown}
       <div className="live-top">
         <TimerRing frac={cd.frac} left={cd.left} size={92} color={st.deep} />
         <div className="live-score">
-          <span className="pts">{turn.points > 0 ? `+${turn.points}` : turn.points}</span>
+          <AnimatedNumber className="pts" value={turn.points} prefixPlus />
           {turn.streak >= 3 && <span className="streak">🔥 {turn.streak} streak</span>}
         </div>
       </div>
@@ -140,6 +141,7 @@ function DescriberLive({
   const mode = MODES[view.settings.modeId];
   const [sent, setSent] = useState<number | null>(null);
   const [flash, setFlash] = useState<'correct' | 'skip' | null>(null);
+  const [gone, setGone] = useState<{ word: string; outcome: 'correct' | 'skip'; k: number } | null>(null);
   const drag = useRef<{ x: number; dx: number } | null>(null);
   const [dx, setDx] = useState(0);
   const locked = sent === turn.cursor || cd.pre > 0 || !turn.card;
@@ -148,6 +150,7 @@ function DescriberLive({
     if (locked) return;
     setSent(turn.cursor);
     setFlash(outcome);
+    setGone({ word: turn.card?.word ?? '', outcome, k: turn.cursor });
     if (outcome === 'correct') {
       sfx.correct(turn.streak + 1);
       buzz(25);
@@ -162,6 +165,11 @@ function DescriberLive({
     const t = setTimeout(() => setFlash(null), 280);
     return () => clearTimeout(t);
   }, [flash]);
+  useEffect(() => {
+    if (!gone) return;
+    const t = setTimeout(() => setGone((g) => (g === gone ? null : g)), 600);
+    return () => clearTimeout(t);
+  }, [gone]);
 
   // desktop: → / Enter = got it, ← / S = skip
   useEffect(() => {
@@ -177,13 +185,13 @@ function DescriberLive({
   const fit = word.length > 16 ? 'xl' : word.length > 10 ? 'l' : word.length > 6 ? 'm' : 's';
 
   return (
-    <div className={`turn-live describer flash-${flash ?? 'none'}`} style={{ '--team': color } as React.CSSProperties}>
+    <div className={`turn-live describer flash-${flash ?? 'none'} ${cd.live && cd.left <= 10 ? 'urgent' : ''}`} style={{ '--team': color } as React.CSSProperties}>
       {countdown}
       <div className="live-top">
         <TimerRing frac={cd.frac} left={cd.left} size={84} color={color} />
         <Pips total={turn.total} outcomes={turn.outcomes} cursor={turn.cursor} />
         <div className="live-score small">
-          <span className="pts">{turn.points > 0 ? `+${turn.points}` : turn.points}</span>
+          <AnimatedNumber className="pts" value={turn.points} prefixPlus />
           {turn.streak >= 2 && <span className="streak">🔥{turn.streak}</span>}
         </div>
       </div>
@@ -212,6 +220,13 @@ function DescriberLive({
         }}
         onPointerCancel={() => ((drag.current = null), setDx(0))}
       >
+        {gone && (
+          <div className={`word-card leaving ${gone.outcome}`} key={`g${gone.k}`} aria-hidden>
+            <div className="word fit-m">{gone.word}</div>
+            <span className="stamp">{gone.outcome === 'correct' ? 'GOT IT!' : 'SKIP'}</span>
+          </div>
+        )}
+        {gone?.outcome === 'correct' && <Burst id={gone.k} colors={['#2FBF55', '#FFC22E', '#FFF7EA', color]} count={18} spread={170} />}
         {cd.pre > 0 ? (
           <div className="word-card hidden-card">Get ready…</div>
         ) : (

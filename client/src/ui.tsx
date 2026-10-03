@@ -165,11 +165,10 @@ export function FxLayer({ conn, view }: { conn: RoomConn; view: RoomView | null 
         let f: Floater | null = null;
         const id = Math.random();
         if (ev.kind === 'react') f = { id, text: ev.emoji, x: 10 + Math.random() * 80, kind: 'react' };
-        if (ev.kind === 'correct') f = { id, text: ev.streak >= 3 ? `🔥×${ev.streak}` : '+1', x: 30 + Math.random() * 40, kind: 'burst' };
-        if (ev.kind === 'foul') f = { id, text: 'BUZZ!', x: 50, kind: 'foul' };
+        if (ev.kind === 'correct') f = { id, text: '+1', x: 35 + Math.random() * 30, kind: 'burst' };
         if (!f) return;
         const item = f;
-        setItems((xs) => [...xs.slice(-24), item]);
+        setItems((xs) => [...xs.filter((x) => item.kind !== 'burst' || x.kind !== 'burst').slice(-14), item]);
         setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 2200);
       }),
     [conn],
